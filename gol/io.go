@@ -29,9 +29,10 @@ type ioCommand uint8
 
 // This is a way of creating enums in Go.
 // It will evaluate to:
-//		ioOutput 	= 0
-//		ioInput 	= 1
-//		ioCheckIdle = 2
+//
+//	ioOutput 	= 0
+//	ioInput 	= 1
+//	ioCheckIdle = 2
 const (
 	ioOutput ioCommand = iota
 	ioInput
@@ -88,7 +89,7 @@ func (io *ioState) writePgmImage() {
 
 // readPgmImage opens a pgm file and sends its data as an array of bytes.
 func (io *ioState) readPgmImage() {
-
+	fmt.Println("reading...")
 	// Request a filename from the distributor.
 	filename := <-io.channels.filename
 
