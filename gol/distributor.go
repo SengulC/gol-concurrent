@@ -20,20 +20,20 @@ func distributor(p Params, c distributorChannels) {
 	// figure out the name of the file from the params, send it down channel
 	// after sending down appropriate command, start io goroutine
 	name := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight)
-	//name := fmt.Sprintf("%dx%d", p.ImageWidth, p.ImageHeight)
-	c.ioFilename <- name
+	// name := fmt.Sprintf("%dx%d", p.ImageWidth, p.ImageHeight)
 	c.ioCommand <- ioInput
+	c.ioFilename <- name
 
 	worldIn := make([][]byte, p.ImageHeight)
 	for i := range worldIn {
 		worldIn[i] = make([]byte, p.ImageWidth)
 	}
 
-	// get image byte by byte and store in world
+	// get image byte by byte and store in: worldIn
 	for row := 0; row < p.ImageHeight; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
 			worldIn[row][col] = <-c.ioInput
-			//fmt.Println(worldIn[row][col])
+			// fmt.Println(worldIn[row][col])
 		}
 	}
 
@@ -48,6 +48,11 @@ func distributor(p Params, c distributorChannels) {
 	// TODO: Execute all turns of the Game of Life.
 	for turn < p.Turns {
 		// update board
+		// you want worldOut to equal worldIn at the start of every turn.
+		for i := range worldOut {
+			worldOut[i] = worldIn[i]
+		}
+
 		for row := 0; row < max; row++ {
 			for col := 0; col < max; col++ {
 				// CURRENT ELEMENT AND ITS NEIGHBOR COUNT RESET
@@ -88,10 +93,10 @@ func distributor(p Params, c distributorChannels) {
 				}
 			}
 		}
-		turn++
 		for i := range worldIn {
 			worldIn[i] = worldOut[i]
 		}
+		turn++
 	}
 
 	// count final worldOut's state
