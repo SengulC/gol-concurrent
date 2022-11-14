@@ -49,13 +49,7 @@ func distributor(p Params, c distributorChannels) {
 	turn := 0
 	// TODO: Execute all turns of the Game of Life.
 	for turn < p.Turns {
-		// update board
-		// you want worldOut to equal worldIn at the start of every turn.
-
-		//for i := range worldOut {
-		//	worldOut[i] = worldIn[i]
-		//}
-
+		// worldO = worldI
 		for row := 0; row < p.ImageHeight; row++ {
 			for col := 0; col < p.ImageWidth; col++ {
 				worldOut[row][col] = worldIn[row][col]
