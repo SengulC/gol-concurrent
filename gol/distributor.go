@@ -102,12 +102,12 @@ func distributor(p Params, c distributorChannels) {
 				worldIn[row][col] = worldOut[row][col]
 			}
 		}
-
+		c.events <- TurnComplete{p.Turns}
 		turn++
 	}
 
 	// count final worldOut's state
-	var count int
+	count := 0
 	var cells []util.Cell
 	for row := 0; row < p.ImageHeight; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
