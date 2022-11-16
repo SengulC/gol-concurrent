@@ -39,22 +39,25 @@ func distributor(p Params, c distributorChannels) {
 
 	// worldOut = worldIn
 	worldOut := make([][]byte, p.ImageHeight)
-	for i := range worldOut {
-		worldOut[i] = worldIn[i]
+	for row := 0; row < p.ImageHeight; row++ {
+		worldOut[row] = make([]byte, p.ImageWidth)
+		for col := 0; col < p.ImageWidth; col++ {
+			worldOut[row][col] = worldIn[row][col]
+		}
 	}
 
 	turn := 0
-	max := p.ImageHeight - 1
 	// TODO: Execute all turns of the Game of Life.
 	for turn < p.Turns {
-		// update board
-		// you want worldOut to equal worldIn at the start of every turn.
-		for i := range worldOut {
-			worldOut[i] = worldIn[i]
+		// worldO = worldI
+		for row := 0; row < p.ImageHeight; row++ {
+			for col := 0; col < p.ImageWidth; col++ {
+				worldOut[row][col] = worldIn[row][col]
+			}
 		}
 
-		for row := 0; row < max; row++ {
-			for col := 0; col < max; col++ {
+		for row := 0; row < p.ImageHeight; row++ {
+			for col := 0; col < p.ImageWidth; col++ {
 				// CURRENT ELEMENT AND ITS NEIGHBOR COUNT RESET
 				element := worldIn[row][col]
 				counter := 0
@@ -63,8 +66,8 @@ func distributor(p Params, c distributorChannels) {
 				for dy := -1; dy <= 1; dy++ {
 					for dx := -1; dx <= 1; dx++ {
 						// creates 3x3 matrix w element as centerpiece, but centerpiece is included as well ofc.
-						nRow := (row + dx + max) % max
-						nCol := (col + dy + max) % max
+						nRow := (row + dx + p.ImageHeight) % p.ImageHeight
+						nCol := (col + dy + p.ImageWidth) % p.ImageWidth
 						// increment counter if given neighbor is alive
 						if worldIn[nRow][nCol] == 255 {
 							counter++
@@ -93,18 +96,21 @@ func distributor(p Params, c distributorChannels) {
 				}
 			}
 		}
-		for i := range worldIn {
-			worldIn[i] = worldOut[i]
+
+		for row := 0; row < p.ImageHeight; row++ {
+			for col := 0; col < p.ImageWidth; col++ {
+				worldIn[row][col] = worldOut[row][col]
+			}
 		}
+		c.events <- TurnComplete{p.Turns}
 		turn++
 	}
 
 	// count final worldOut's state
-	max = p.ImageHeight
-	var count int
+	count := 0
 	var cells []util.Cell
-	for row := 0; row < max; row++ {
-		for col := 0; col < max; col++ {
+	for row := 0; row < p.ImageHeight; row++ {
+		for col := 0; col < p.ImageWidth; col++ {
 			if worldOut[row][col] == 255 {
 				c := util.Cell{X: col, Y: row}
 				cells = append(cells, c)
