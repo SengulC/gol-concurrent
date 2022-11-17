@@ -15,8 +15,8 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
-func worker(startY, endY, currentTurn int, worldIn [][]byte, out chan<- [][]uint8, p Params) {
-	boardSeg := updateBoard(startY, endY, currentTurn, worldIn, p)
+func worker(startY, endY, currentThread int, worldIn [][]byte, out chan<- [][]uint8, p Params) {
+	boardSeg := updateBoard(startY, endY, currentThread, worldIn, p)
 	out <- boardSeg
 }
 
@@ -29,18 +29,24 @@ func makeMatrix(height, width int) [][]uint8 {
 }
 
 // UpdateBoard updates and returns a single iteration of GOL
-func updateBoard(startY, endY, currentTurn int, worldIn [][]byte, p Params) [][]byte {
+func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) [][]byte {
 	// worldOut = worldIn
-	workerHeight := endY - startY
-	worldOut := make([][]byte, workerHeight)
-	for row := 0; row < workerHeight; row++ {
+	segHeight := endY - startY
+	fmt.Println("current thread", currentThread, "segHeight", segHeight)
+	worldOut := make([][]byte, segHeight)
+	for row := 0; row < segHeight; row++ {
 		worldOut[row] = make([]byte, p.ImageWidth)
 		for col := 0; col < p.ImageWidth; col++ {
 			worldOut[row][col] = 0
 		}
 	}
 
+	if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
+		endY++
+	}
+
 	for row := startY; row < endY; row++ {
+		fmt.Println("row:", row)
 		for col := 0; col < p.ImageWidth; col++ {
 			// CURRENT ELEMENT AND ITS NEIGHBOR COUNT RESET
 			element := worldIn[row][col]
@@ -64,7 +70,7 @@ func updateBoard(startY, endY, currentTurn int, worldIn [][]byte, p Params) [][]
 				counter--
 			}
 
-			superRow := row - (currentTurn * workerHeight)
+			superRow := row - (currentThread * segHeight)
 
 			// if element dead
 			if element == 0 {
@@ -120,7 +126,7 @@ func distributor(p Params, c distributorChannels) {
 	// TODO: Execute all turns of the Game of Life.
 	for turn < p.Turns {
 		if p.Threads == 1 {
-			worldOut = updateBoard(0, p.ImageHeight, turn, worldIn, p)
+			worldOut = updateBoard(0, p.ImageHeight, 0, worldIn, p)
 		} else {
 			workerHeight := p.ImageHeight / p.Threads
 			fmt.Println("p.Threads, workerHeight:")
@@ -132,7 +138,7 @@ func distributor(p Params, c distributorChannels) {
 			}
 
 			for i := 0; i < p.Threads; i++ {
-				go worker(i*workerHeight, (i+1)*workerHeight, turn, worldIn, out[i], p)
+				go worker(i*workerHeight, (i+1)*workerHeight, i, worldIn, out[i], p)
 			}
 
 			// call worker twice
@@ -141,8 +147,6 @@ func distributor(p Params, c distributorChannels) {
 
 			for i := 0; i < p.Threads; i++ {
 				part := <-out[i]
-				//fmt.Println(i, "part:")
-				//fmt.Println(part)
 				worldOut = append(worldOut, part...)
 			}
 		}
