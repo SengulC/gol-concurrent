@@ -1,6 +1,7 @@
 package gol
 
 import (
+	"fmt"
 	"strconv"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -14,8 +15,8 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
-func worker(startY, endY int, worldIn [][]byte, out chan<- [][]uint8, p Params) {
-	boardSeg := updateBoard(startY, endY, worldIn, p)
+func worker(startY, endY, currentTurn int, worldIn [][]byte, out chan<- [][]uint8, p Params) {
+	boardSeg := updateBoard(startY, endY, currentTurn, worldIn, p)
 	out <- boardSeg
 }
 
@@ -28,7 +29,7 @@ func makeMatrix(height, width int) [][]uint8 {
 }
 
 // UpdateBoard updates and returns a single iteration of GOL
-func updateBoard(startY, endY int, worldIn [][]byte, p Params) [][]byte {
+func updateBoard(startY, endY, currentTurn int, worldIn [][]byte, p Params) [][]byte {
 	// worldOut = worldIn
 	workerHeight := endY - startY
 	worldOut := make([][]byte, workerHeight)
@@ -39,7 +40,7 @@ func updateBoard(startY, endY int, worldIn [][]byte, p Params) [][]byte {
 		}
 	}
 
-	for row := 0; row < workerHeight; row++ {
+	for row := startY; row < endY; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
 			// CURRENT ELEMENT AND ITS NEIGHBOR COUNT RESET
 			element := worldIn[row][col]
@@ -63,21 +64,23 @@ func updateBoard(startY, endY int, worldIn [][]byte, p Params) [][]byte {
 				counter--
 			}
 
+			superRow := row - (currentTurn * workerHeight)
+
 			// if element dead
 			if element == 0 {
 				if counter == 3 {
-					worldOut[row][col] = 255
+					worldOut[superRow][col] = 255
 				} else {
-					worldOut[row][col] = 0
+					worldOut[superRow][col] = 0
 				}
 			} else {
 				// if element alive
 				if counter < 2 {
-					worldOut[row][col] = 0
+					worldOut[superRow][col] = 0
 				} else if counter > 3 {
-					worldOut[row][col] = 0
+					worldOut[superRow][col] = 0
 				} else {
-					worldOut[row][col] = 255
+					worldOut[superRow][col] = 255
 				}
 			}
 		}
@@ -106,17 +109,22 @@ func distributor(p Params, c distributorChannels) {
 
 	// worldOut = worldIn
 	worldOut := make([][]byte, p.ImageHeight)
-	for i := range worldOut {
-		worldOut[i] = worldIn[i]
+	for row := 0; row < p.ImageHeight; row++ {
+		worldOut[row] = make([]byte, p.ImageWidth)
+		for col := 0; col < p.ImageWidth; col++ {
+			worldOut[row][col] = worldIn[row][col]
+		}
 	}
 
 	turn := 0
 	// TODO: Execute all turns of the Game of Life.
 	for turn < p.Turns {
 		if p.Threads == 1 {
-			worldOut = updateBoard(0, p.ImageHeight, worldIn, p)
+			worldOut = updateBoard(0, p.ImageHeight, turn, worldIn, p)
 		} else {
 			workerHeight := p.ImageHeight / p.Threads
+			fmt.Println("p.Threads, workerHeight:")
+			fmt.Println(p.Threads, workerHeight)
 			out := make([]chan [][]uint8, p.Threads)
 
 			for i := range out {
@@ -124,13 +132,17 @@ func distributor(p Params, c distributorChannels) {
 			}
 
 			for i := 0; i < p.Threads; i++ {
-				go worker(i*workerHeight, (i+1)*workerHeight, worldIn, out[i], p)
+				go worker(i*workerHeight, (i+1)*workerHeight, turn, worldIn, out[i], p)
 			}
+
+			// call worker twice
 
 			worldOut = makeMatrix(0, 0)
 
 			for i := 0; i < p.Threads; i++ {
 				part := <-out[i]
+				//fmt.Println(i, "part:")
+				//fmt.Println(part)
 				worldOut = append(worldOut, part...)
 			}
 		}
