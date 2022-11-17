@@ -17,10 +17,7 @@ type distributorChannels struct {
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 	// TODO: Create a 2D slice to store the world.
-	// figure out the name of the file from the params, send it down channel
-	// after sending down appropriate command, start io goroutine
 	name := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight)
-	// name := fmt.Sprintf("%dx%d", p.ImageWidth, p.ImageHeight)
 	c.ioCommand <- ioInput
 	c.ioFilename <- name
 
@@ -33,7 +30,6 @@ func distributor(p Params, c distributorChannels) {
 	for row := 0; row < p.ImageHeight; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
 			worldIn[row][col] = <-c.ioInput
-			// fmt.Println(worldIn[row][col])
 		}
 	}
 
@@ -47,8 +43,7 @@ func distributor(p Params, c distributorChannels) {
 	max := p.ImageHeight - 1
 	// TODO: Execute all turns of the Game of Life.
 	for turn < p.Turns {
-		// update board
-		// you want worldOut to equal worldIn at the start of every turn.
+		// worldOut = worldIn, at the start of every turn.
 		for i := range worldOut {
 			worldOut[i] = worldIn[i]
 		}
