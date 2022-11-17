@@ -32,7 +32,7 @@ func makeMatrix(height, width int) [][]uint8 {
 func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) [][]byte {
 	// worldOut = worldIn
 	segHeight := endY - startY
-	fmt.Println("current thread", currentThread, "segHeight", segHeight)
+	//fmt.Println("current thread", currentThread, "segHeight", segHeight)
 	worldOut := make([][]byte, segHeight)
 	for row := 0; row < segHeight; row++ {
 		worldOut[row] = make([]byte, p.ImageWidth)
@@ -40,16 +40,17 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 			worldOut[row][col] = 0
 		}
 	}
+	//fmt.Println("made worldOut:", segHeight, "x", p.ImageWidth)
 
 	if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
 		endY++
 	}
 
 	for row := startY; row < endY; row++ {
-		fmt.Println("row:", row)
 		for col := 0; col < p.ImageWidth; col++ {
 			// CURRENT ELEMENT AND ITS NEIGHBOR COUNT RESET
 			element := worldIn[row][col]
+			//fmt.Println("elem [r][c]:", row, col)
 			counter := 0
 
 			// iterate through all neighbors of given element
@@ -71,6 +72,7 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 			}
 
 			superRow := row - (currentThread * segHeight)
+			fmt.Println("superrow=", superRow)
 
 			// if element dead
 			if element == 0 {
@@ -91,6 +93,8 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 			}
 		}
 	}
+
+	util.VisualiseMatrix(worldOut, p.ImageWidth, segHeight)
 
 	return worldOut
 }
