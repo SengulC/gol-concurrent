@@ -193,8 +193,8 @@ func distributor(p Params, c distributorChannels) {
 	max := p.ImageHeight
 	var count int
 	var cells []util.Cell
-	for row := 0; row < max; row++ {
-		for col := 0; col < max; col++ {
+	for row := 0; row < p.ImageHeight; row++ {
+		for col := 0; col < p.ImageWidth; col++ {
 			if worldOut[row][col] == 255 {
 				c := util.Cell{X: col, Y: row}
 				cells = append(cells, c)
