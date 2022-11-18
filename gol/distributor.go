@@ -2,6 +2,7 @@ package gol
 
 import (
 	"strconv"
+	"time"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -25,6 +26,18 @@ func makeMatrix(height, width int) [][]uint8 {
 		matrix[i] = make([]uint8, width)
 	}
 	return matrix
+}
+
+func calcAliveCellCount(height, width int, world [][]byte) int {
+	var count int
+	for row := 0; row < height; row++ {
+		for col := 0; col < width; col++ {
+			if world[row][col] == 255 {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // UpdateBoard updates and returns a single iteration of GOL
@@ -80,7 +93,6 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 			}
 
 			superRow := row - startY
-			//fmt.Println("superrow=", superRow)
 
 			// if element dead
 			if element == 0 {
@@ -101,10 +113,6 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 			}
 		}
 	}
-
-	//fmt.Println("UPDATED worldOut")
-	//util.VisualiseMatrix(worldOut, p.ImageWidth, segHeight)
-
 	return worldOut
 }
 
@@ -135,44 +143,50 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
+	timeOver := time.NewTicker(2 * time.Second)
+
 	turn := 0
 	// TODO: Execute all turns of the Game of Life.
 	for turn < p.Turns {
-		if p.Threads == 1 {
-			worldOut = updateBoard(0, p.ImageHeight, 0, worldIn, p)
-		} else {
-			workerHeight := p.ImageHeight / p.Threads
-			//fmt.Println("p.Threads, workerHeight:")
-			//fmt.Println(p.Threads, workerHeight)
-			out := make([]chan [][]uint8, p.Threads)
+		select {
+		case <-timeOver.C:
+			c.events <- AliveCellsCount{turn, calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldOut)}
+		default:
+			if p.Threads == 1 {
+				worldOut = updateBoard(0, p.ImageHeight, 0, worldIn, p)
+			} else {
+				workerHeight := p.ImageHeight / p.Threads
+				out := make([]chan [][]uint8, p.Threads)
 
-			for i := range out {
-				out[i] = make(chan [][]uint8)
-			}
-
-			for i := 0; i < p.Threads; i++ {
-				endY := (i + 1) * workerHeight
-				if i == p.Threads-1 {
-					endY = p.ImageHeight
+				for i := range out {
+					out[i] = make(chan [][]uint8)
 				}
-				go worker(i*workerHeight, endY, i, worldIn, out[i], p)
+
+				for i := 0; i < p.Threads; i++ {
+					endY := (i + 1) * workerHeight
+					if i == p.Threads-1 {
+						endY = p.ImageHeight
+					}
+					go worker(i*workerHeight, endY, i, worldIn, out[i], p)
+				}
+
+				worldOut = makeMatrix(0, 0)
+
+				for i := 0; i < p.Threads; i++ {
+					part := <-out[i]
+					worldOut = append(worldOut, part...)
+				}
 			}
 
-			worldOut = makeMatrix(0, 0)
-
-			for i := 0; i < p.Threads; i++ {
-				part := <-out[i]
-				worldOut = append(worldOut, part...)
+			// worldIn = worldOut before you move onto the next iteration
+			for row := 0; row < p.ImageHeight; row++ {
+				for col := 0; col < p.ImageWidth; col++ {
+					worldIn[row][col] = worldOut[row][col]
+				}
 			}
+			c.events <- TurnComplete{turn}
+			turn++
 		}
-
-		// worldIn = worldOut before you move onto the next iteration
-		for row := 0; row < p.ImageHeight; row++ {
-			for col := 0; col < p.ImageWidth; col++ {
-				worldIn[row][col] = worldOut[row][col]
-			}
-		}
-		turn++
 	}
 
 	// count final worldOut's state
