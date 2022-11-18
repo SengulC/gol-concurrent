@@ -1,7 +1,6 @@
 package gol
 
 import (
-	"fmt"
 	"strconv"
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -31,9 +30,9 @@ func makeMatrix(height, width int) [][]uint8 {
 // UpdateBoard updates and returns a single iteration of GOL
 func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) [][]byte {
 	segHeight := endY - startY
-	if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
-		segHeight++
-	}
+	//if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
+	//	segHeight++
+	//}
 
 	// worldOut = 0
 	worldOut := make([][]byte, segHeight)
@@ -44,18 +43,18 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 		}
 	}
 
-	fmt.Println("just made worldOut, current thread:", currentThread)
-	util.VisualiseMatrix(worldOut, p.ImageWidth, segHeight)
+	//fmt.Println("just made worldOut, current thread:", currentThread)
+	//util.VisualiseMatrix(worldOut, p.ImageWidth, segHeight)
 
 	//fmt.Println("made worldOut:", segHeight, "x", p.ImageWidth)
 
-	endY2 := endY
-	// if it's the LAST thread, and number of threads is ODD, but it is NOT thread 0
-	if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
-		endY2 = endY + 1
-	}
+	//endY2 := endY
+	//// if it's the LAST thread, and number of threads is ODD, but it is NOT thread 0
+	//if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
+	//	endY2 = endY + 1
+	//}
 
-	for row := startY; row < endY2; row++ {
+	for row := startY; row < endY; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
 			// CURRENT ELEMENT AND ITS NEIGHBOR COUNT RESET
 			element := worldIn[row][col]
@@ -80,7 +79,7 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 				counter--
 			}
 
-			superRow := row - (currentThread * (endY - startY))
+			superRow := row - startY
 			//fmt.Println("superrow=", superRow)
 
 			// if element dead
@@ -103,8 +102,8 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 		}
 	}
 
-	fmt.Println("UPDATED worldOut")
-	util.VisualiseMatrix(worldOut, p.ImageWidth, segHeight)
+	//fmt.Println("UPDATED worldOut")
+	//util.VisualiseMatrix(worldOut, p.ImageWidth, segHeight)
 
 	return worldOut
 }
@@ -143,8 +142,8 @@ func distributor(p Params, c distributorChannels) {
 			worldOut = updateBoard(0, p.ImageHeight, 0, worldIn, p)
 		} else {
 			workerHeight := p.ImageHeight / p.Threads
-			fmt.Println("p.Threads, workerHeight:")
-			fmt.Println(p.Threads, workerHeight)
+			//fmt.Println("p.Threads, workerHeight:")
+			//fmt.Println(p.Threads, workerHeight)
 			out := make([]chan [][]uint8, p.Threads)
 
 			for i := range out {
@@ -152,10 +151,12 @@ func distributor(p Params, c distributorChannels) {
 			}
 
 			for i := 0; i < p.Threads; i++ {
-				go worker(i*workerHeight, (i+1)*workerHeight, i, worldIn, out[i], p)
+				endY := (i + 1) * workerHeight
+				if i == p.Threads-1 {
+					endY = p.ImageHeight
+				}
+				go worker(i*workerHeight, endY, i, worldIn, out[i], p)
 			}
-
-			// call worker twice
 
 			worldOut = makeMatrix(0, 0)
 
