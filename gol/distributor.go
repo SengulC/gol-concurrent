@@ -16,11 +16,6 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
-func worker(startY, endY, currentThread int, worldIn [][]byte, out chan<- [][]uint8, p Params) {
-	boardSeg := updateBoard(startY, endY, currentThread, worldIn, p)
-	out <- boardSeg
-}
-
 func makeMatrix(height, width int) [][]uint8 {
 	matrix := make([][]uint8, height)
 	for i := range matrix {
@@ -41,8 +36,13 @@ func calcAliveCellCount(height, width int, world [][]byte) int {
 	return count
 }
 
+func worker(startY, endY, currentThread, currentTurn int, worldIn [][]byte, out chan<- [][]uint8, p Params, events chan<- Event) {
+	boardSeg := updateBoard(startY, endY, currentThread, currentTurn, worldIn, p, events)
+	out <- boardSeg
+}
+
 // UpdateBoard updates and returns a single iteration of GOL
-func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) [][]byte {
+func updateBoard(startY, endY, currentThread, currentTurn int, worldIn [][]byte, p Params, events chan<- Event) [][]byte {
 	segHeight := endY - startY
 	//if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
 	//	segHeight++
@@ -56,11 +56,6 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 			worldOut[row][col] = 0
 		}
 	}
-
-	//fmt.Println("just made worldOut, current thread:", currentThread)
-	//util.VisualiseMatrix(worldOut, p.ImageWidth, segHeight)
-
-	//fmt.Println("made worldOut:", segHeight, "x", p.ImageWidth)
 
 	//endY2 := endY
 	//// if it's the LAST thread, and number of threads is ODD, but it is NOT thread 0
@@ -99,17 +94,22 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 			if element == 0 {
 				if counter == 3 {
 					worldOut[superRow][col] = 255
+					events <- CellFlipped{currentTurn, util.Cell{X: superRow, Y: col}}
 				} else {
 					worldOut[superRow][col] = 0
+					events <- CellFlipped{currentTurn, util.Cell{X: superRow, Y: col}}
 				}
 			} else {
 				// if element alive
 				if counter < 2 {
 					worldOut[superRow][col] = 0
+					events <- CellFlipped{currentTurn, util.Cell{X: superRow, Y: col}}
 				} else if counter > 3 {
 					worldOut[superRow][col] = 0
+					events <- CellFlipped{currentTurn, util.Cell{X: superRow, Y: col}}
 				} else {
 					worldOut[superRow][col] = 255
+					events <- CellFlipped{currentTurn, util.Cell{X: superRow, Y: col}}
 				}
 			}
 		}
@@ -132,6 +132,9 @@ func distributor(p Params, c distributorChannels) {
 	for row := 0; row < p.ImageHeight; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
 			worldIn[row][col] = <-c.ioInput
+			if worldIn[row][col] == 255 {
+				c.events <- CellFlipped{0, util.Cell{X: row, Y: col}}
+			}
 		}
 	}
 
@@ -154,7 +157,7 @@ func distributor(p Params, c distributorChannels) {
 			c.events <- AliveCellsCount{turn, calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldOut)}
 		default:
 			if p.Threads == 1 {
-				worldOut = updateBoard(0, p.ImageHeight, 0, worldIn, p)
+				worldOut = updateBoard(0, p.ImageHeight, 0, turn, worldIn, p, c.events)
 			} else {
 				workerHeight := p.ImageHeight / p.Threads
 				out := make([]chan [][]uint8, p.Threads)
@@ -163,12 +166,16 @@ func distributor(p Params, c distributorChannels) {
 					out[i] = make(chan [][]uint8)
 				}
 
+				// small height = height / threads
+				// big height = small height + 1
+				// do one of them height%threads times, n the other the rest of the time
+
 				for i := 0; i < p.Threads; i++ {
 					endY := (i + 1) * workerHeight
 					if i == p.Threads-1 {
 						endY = p.ImageHeight
 					}
-					go worker(i*workerHeight, endY, i, worldIn, out[i], p)
+					go worker(i*workerHeight, endY, i, turn, worldIn, out[i], p, c.events)
 				}
 
 				worldOut = makeMatrix(0, 0)
