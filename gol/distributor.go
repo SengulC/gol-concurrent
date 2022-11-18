@@ -2,6 +2,7 @@ package gol
 
 import (
 	"strconv"
+	"time"
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
@@ -14,13 +15,111 @@ type distributorChannels struct {
 	ioInput    <-chan uint8
 }
 
+func worker(startY, endY, currentThread int, worldIn [][]byte, out chan<- [][]uint8, p Params) {
+	boardSeg := updateBoard(startY, endY, currentThread, worldIn, p)
+	out <- boardSeg
+}
+
+func makeMatrix(height, width int) [][]uint8 {
+	matrix := make([][]uint8, height)
+	for i := range matrix {
+		matrix[i] = make([]uint8, width)
+	}
+	return matrix
+}
+
+func calcAliveCellCount(height, width int, world [][]byte) int {
+	var count int
+	for row := 0; row < height; row++ {
+		for col := 0; col < width; col++ {
+			if world[row][col] == 255 {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+// UpdateBoard updates and returns a single iteration of GOL
+func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) [][]byte {
+	segHeight := endY - startY
+	//if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
+	//	segHeight++
+	//}
+
+	// worldOut = 0
+	worldOut := make([][]byte, segHeight)
+	for row := 0; row < segHeight; row++ {
+		worldOut[row] = make([]byte, p.ImageWidth)
+		for col := 0; col < p.ImageWidth; col++ {
+			worldOut[row][col] = 0
+		}
+	}
+
+	//fmt.Println("just made worldOut, current thread:", currentThread)
+	//util.VisualiseMatrix(worldOut, p.ImageWidth, segHeight)
+
+	//fmt.Println("made worldOut:", segHeight, "x", p.ImageWidth)
+
+	//endY2 := endY
+	//// if it's the LAST thread, and number of threads is ODD, but it is NOT thread 0
+	//if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
+	//	endY2 = endY + 1
+	//}
+
+	for row := startY; row < endY; row++ {
+		for col := 0; col < p.ImageWidth; col++ {
+			// CURRENT ELEMENT AND ITS NEIGHBOR COUNT RESET
+			element := worldIn[row][col]
+			//fmt.Println("elem [r][c]:", row, col)
+			counter := 0
+
+			// iterate through all neighbors of given element
+			for dy := -1; dy <= 1; dy++ {
+				for dx := -1; dx <= 1; dx++ {
+					// creates 3x3 matrix w element as centerpiece, but centerpiece is included as well ofc.
+					nRow := (row + dx + p.ImageHeight) % p.ImageHeight
+					nCol := (col + dy + p.ImageWidth) % p.ImageWidth
+					// increment counter if given neighbor is alive
+					if worldIn[nRow][nCol] == 255 {
+						counter++
+					}
+				}
+			}
+
+			// if element is alive exclude it from the 3x3 matrix counter
+			if element == 255 {
+				counter--
+			}
+
+			superRow := row - startY
+
+			// if element dead
+			if element == 0 {
+				if counter == 3 {
+					worldOut[superRow][col] = 255
+				} else {
+					worldOut[superRow][col] = 0
+				}
+			} else {
+				// if element alive
+				if counter < 2 {
+					worldOut[superRow][col] = 0
+				} else if counter > 3 {
+					worldOut[superRow][col] = 0
+				} else {
+					worldOut[superRow][col] = 255
+				}
+			}
+		}
+	}
+	return worldOut
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 	// TODO: Create a 2D slice to store the world.
-	// figure out the name of the file from the params, send it down channel
-	// after sending down appropriate command, start io goroutine
 	name := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight)
-	// name := fmt.Sprintf("%dx%d", p.ImageWidth, p.ImageHeight)
 	c.ioCommand <- ioInput
 	c.ioFilename <- name
 
@@ -28,12 +127,10 @@ func distributor(p Params, c distributorChannels) {
 	for i := range worldIn {
 		worldIn[i] = make([]byte, p.ImageWidth)
 	}
-
 	// get image byte by byte and store in: worldIn
 	for row := 0; row < p.ImageHeight; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
 			worldIn[row][col] = <-c.ioInput
-			// fmt.Println(worldIn[row][col])
 		}
 	}
 
@@ -46,68 +143,55 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
+	timeOver := time.NewTicker(2 * time.Second)
+
 	turn := 0
 	// TODO: Execute all turns of the Game of Life.
 	for turn < p.Turns {
-		// worldO = worldI
-		for row := 0; row < p.ImageHeight; row++ {
-			for col := 0; col < p.ImageWidth; col++ {
-				worldOut[row][col] = worldIn[row][col]
-			}
-		}
+		select {
+		case <-timeOver.C:
+			c.events <- AliveCellsCount{turn, calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldOut)}
+		default:
+			if p.Threads == 1 {
+				worldOut = updateBoard(0, p.ImageHeight, 0, worldIn, p)
+			} else {
+				workerHeight := p.ImageHeight / p.Threads
+				out := make([]chan [][]uint8, p.Threads)
 
-		for row := 0; row < p.ImageHeight; row++ {
-			for col := 0; col < p.ImageWidth; col++ {
-				// CURRENT ELEMENT AND ITS NEIGHBOR COUNT RESET
-				element := worldIn[row][col]
-				counter := 0
-
-				// iterate through all neighbors of given element
-				for dy := -1; dy <= 1; dy++ {
-					for dx := -1; dx <= 1; dx++ {
-						// creates 3x3 matrix w element as centerpiece, but centerpiece is included as well ofc.
-						nRow := (row + dx + p.ImageHeight) % p.ImageHeight
-						nCol := (col + dy + p.ImageWidth) % p.ImageWidth
-						// increment counter if given neighbor is alive
-						if worldIn[nRow][nCol] == 255 {
-							counter++
-							// fmt.Println(counter)
-						}
-					}
+				for i := range out {
+					out[i] = make(chan [][]uint8)
 				}
 
-				// if element is alive exclude it from the 3x3 matrix counter
-				if element == 255 {
-					counter--
+				for i := 0; i < p.Threads; i++ {
+					endY := (i + 1) * workerHeight
+					if i == p.Threads-1 {
+						endY = p.ImageHeight
+					}
+					go worker(i*workerHeight, endY, i, worldIn, out[i], p)
 				}
 
-				// if element dead
-				if element == 0 {
-					if counter == 3 {
-						worldOut[row][col] = 255
-					}
-				} else {
-					// if element alive
-					if counter < 2 {
-						worldOut[row][col] = 0
-					} else if counter > 3 {
-						worldOut[row][col] = 0
-					}
+				worldOut = makeMatrix(0, 0)
+
+				for i := 0; i < p.Threads; i++ {
+					part := <-out[i]
+					worldOut = append(worldOut, part...)
 				}
 			}
-		}
 
-		for row := 0; row < p.ImageHeight; row++ {
-			for col := 0; col < p.ImageWidth; col++ {
-				worldIn[row][col] = worldOut[row][col]
+			// worldIn = worldOut before you move onto the next iteration
+			for row := 0; row < p.ImageHeight; row++ {
+				for col := 0; col < p.ImageWidth; col++ {
+					worldIn[row][col] = worldOut[row][col]
+				}
 			}
+			c.events <- TurnComplete{turn}
+			turn++
 		}
-		c.events <- TurnComplete{p.Turns}
-		turn++
 	}
 
 	// count final worldOut's state
-	count := 0
+	max := p.ImageHeight
+	var count int
 	var cells []util.Cell
 	for row := 0; row < p.ImageHeight; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
