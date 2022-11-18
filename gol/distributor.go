@@ -30,9 +30,12 @@ func makeMatrix(height, width int) [][]uint8 {
 
 // UpdateBoard updates and returns a single iteration of GOL
 func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) [][]byte {
-	// worldOut = worldIn
 	segHeight := endY - startY
-	//fmt.Println("current thread", currentThread, "segHeight", segHeight)
+	if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
+		segHeight++
+	}
+
+	// worldOut = 0
 	worldOut := make([][]byte, segHeight)
 	for row := 0; row < segHeight; row++ {
 		worldOut[row] = make([]byte, p.ImageWidth)
@@ -40,13 +43,19 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 			worldOut[row][col] = 0
 		}
 	}
+
+	fmt.Println("just made worldOut, current thread:", currentThread)
+	util.VisualiseMatrix(worldOut, p.ImageWidth, segHeight)
+
 	//fmt.Println("made worldOut:", segHeight, "x", p.ImageWidth)
 
+	endY2 := endY
+	// if it's the LAST thread, and number of threads is ODD, but it is NOT thread 0
 	if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
-		endY++
+		endY2 = endY + 1
 	}
 
-	for row := startY; row < endY; row++ {
+	for row := startY; row < endY2; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
 			// CURRENT ELEMENT AND ITS NEIGHBOR COUNT RESET
 			element := worldIn[row][col]
@@ -71,8 +80,8 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 				counter--
 			}
 
-			superRow := row - (currentThread * segHeight)
-			fmt.Println("superrow=", superRow)
+			superRow := row - (currentThread * (endY - startY))
+			//fmt.Println("superrow=", superRow)
 
 			// if element dead
 			if element == 0 {
@@ -94,6 +103,7 @@ func updateBoard(startY, endY, currentThread int, worldIn [][]byte, p Params) []
 		}
 	}
 
+	fmt.Println("UPDATED worldOut")
 	util.VisualiseMatrix(worldOut, p.ImageWidth, segHeight)
 
 	return worldOut
@@ -155,6 +165,12 @@ func distributor(p Params, c distributorChannels) {
 			}
 		}
 
+		// worldIn = worldOut before you move onto the next iteration
+		for row := 0; row < p.ImageHeight; row++ {
+			for col := 0; col < p.ImageWidth; col++ {
+				worldIn[row][col] = worldOut[row][col]
+			}
+		}
 		turn++
 	}
 
