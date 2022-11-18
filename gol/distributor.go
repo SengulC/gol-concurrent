@@ -1,6 +1,7 @@
 package gol
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 	"uk.ac.bris.cs/gameoflife/util"
@@ -190,7 +191,6 @@ func distributor(p Params, c distributorChannels) {
 	}
 
 	// count final worldOut's state
-	max := p.ImageHeight
 	var count int
 	var cells []util.Cell
 	for row := 0; row < p.ImageHeight; row++ {
@@ -202,6 +202,16 @@ func distributor(p Params, c distributorChannels) {
 			}
 		}
 	}
+
+	fmt.Println("before output")
+	c.ioCommand <- ioOutput
+	c.ioFilename <- name + "x" + strconv.Itoa(p.Turns)
+	for row := 0; row < p.ImageHeight; row++ {
+		for col := 0; col < p.ImageWidth; col++ {
+			c.ioOutput <- worldOut[row][col]
+		}
+	}
+	fmt.Println("after output")
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
 	// pass it down events channel (list of alive cells)
