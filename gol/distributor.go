@@ -25,6 +25,18 @@ func makeMatrix(height, width int) [][]uint8 {
 	return matrix
 }
 
+func differenceInFlippedCells(height, width int, worldIn, worldOut [][]byte) int {
+	count := 0
+	for row := 0; row < height; row++ {
+		for col := 0; col < width; col++ {
+			if worldOut[row][col] != worldIn[row][col] {
+				count++
+			}
+		}
+	}
+	return count
+}
+
 func calcAliveCellCount(height, width int, world [][]byte) int {
 	var count int
 	for row := 0; row < height; row++ {
@@ -158,11 +170,14 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}
 
+	fmt.Println("turn 0 alive cell count:", calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldIn))
+
 	// calculate alive cells of worldIn and pass a flipped event for each
 	aliveCells := calcAliveCells(worldIn, p.ImageHeight, p.ImageWidth)
 	for i := range aliveCells {
 		c.events <- CellFlipped{0, aliveCells[i]}
 	}
+	fmt.Println("")
 
 	c.events <- TurnComplete{0}
 
@@ -222,7 +237,6 @@ func distributor(p Params, c distributorChannels) {
 				<-c.ioIdle
 				c.events <- StateChange{turn, Quitting}
 				close(c.events)
-
 			}
 		default:
 			if quit {
@@ -248,6 +262,7 @@ func distributor(p Params, c distributorChannels) {
 						endY = p.ImageHeight
 					}
 					go worker(i*workerHeight, endY, i, turn, worldIn, out[i], p, c.events)
+					//fmt.Println("worker heights", endY - (i * workerHeight))
 				}
 
 				worldOut = makeMatrix(0, 0)
@@ -261,6 +276,8 @@ func distributor(p Params, c distributorChannels) {
 			turn++
 
 			// check which cells have changed
+			fmt.Println("turn", turn, "alive cell count:", calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldOut))
+			fmt.Println("difference in flipped cells:", differenceInFlippedCells(p.ImageHeight, p.ImageWidth, worldIn, worldOut))
 			for row := 0; row < p.ImageHeight; row++ {
 				for col := 0; col < p.ImageWidth; col++ {
 					if worldOut[row][col] != worldIn[row][col] {
