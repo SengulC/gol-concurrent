@@ -81,7 +81,6 @@ func updateBoard(startY, endY, currentThread, currentTurn int, worldIn [][]byte,
 		for col := 0; col < p.ImageWidth; col++ {
 			// CURRENT ELEMENT AND ITS NEIGHBOR COUNT RESET
 			element := worldIn[row][col]
-			//fmt.Println("elem [r][c]:", row, col)
 			counter := 0
 
 			// iterate through all neighbors of given element
