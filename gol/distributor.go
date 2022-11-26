@@ -274,24 +274,13 @@ func distributor(p Params, c distributorChannels) {
 			turn++
 
 			// check which cells have changed
-			//fmt.Println("turn", turn, "alive cell count:", calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldOut))
-			//fmt.Println("difference in flipped cells:", differenceInFlippedCells(p.ImageHeight, p.ImageWidth, worldIn, worldOut))
 			for row := 0; row < p.ImageHeight; row++ {
 				for col := 0; col < p.ImageWidth; col++ {
 					if worldOut[row][col] != worldIn[row][col] {
-						//fmt.Println("changed:", "[", row, "]", "[", col, "]")
-						// NOTE: print out wO and wI elems and state when they're changed
-						// CALCALIVECELLSCOUNT(WO) - CACC(WI) = NUM. RUN FOR LOOP NUM TIMES
 						c.events <- CellFlipped{turn, util.Cell{X: col, Y: row}}
 					}
 				}
 			}
-
-			//worldOutAlives := calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldOut)
-			//worldInAlives := calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldIn)
-
-			//stupidCount := Abs(worldOutAlives - worldInAlives)
-			//fmt.Println("NUMBER OF TIMES CELLS CHANGED:", stupidCount)
 
 			// worldIn = worldOut before you move onto the next iteration
 			for row := 0; row < p.ImageHeight; row++ {
