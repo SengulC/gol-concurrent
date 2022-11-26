@@ -17,19 +17,19 @@ func main() {
 	flag.IntVar(
 		&params.Threads,
 		"t",
-		8,
+		1,
 		"Specify the number of worker threads to use. Defaults to 8.")
 
 	flag.IntVar(
 		&params.ImageWidth,
 		"w",
-		512,
+		64,
 		"Specify the width of the image. Defaults to 512.")
 
 	flag.IntVar(
 		&params.ImageHeight,
 		"h",
-		512,
+		64,
 		"Specify the height of the image. Defaults to 512.")
 
 	flag.IntVar(

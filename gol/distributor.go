@@ -119,10 +119,10 @@ func updateBoard(startY, endY, currentThread, currentTurn int, worldIn [][]byte,
 			if element == 0 {
 				if counter == 3 {
 					worldOut[superRow][col] = 255
+					// CHANGE COL ROW ORDER
 					//events <- CellFlipped{currentTurn, util.Cell{X: superRow, Y: col}}
 				} else {
 					worldOut[superRow][col] = 0
-					//events <- CellFlipped{currentTurn, util.Cell{X: superRow, Y: col}}
 				}
 			} else {
 				// if element alive
@@ -134,7 +134,6 @@ func updateBoard(startY, endY, currentThread, currentTurn int, worldIn [][]byte,
 					//events <- CellFlipped{currentTurn, util.Cell{X: superRow, Y: col}}
 				} else {
 					worldOut[superRow][col] = 255
-					//events <- CellFlipped{currentTurn, util.Cell{X: superRow, Y: col}}
 				}
 			}
 		}
@@ -159,32 +158,30 @@ func distributor(p Params, c distributorChannels) {
 	c.ioCommand <- ioInput
 	c.ioFilename <- name
 
-	worldIn := make([][]byte, p.ImageHeight)
-	for i := range worldIn {
-		worldIn[i] = make([]byte, p.ImageWidth)
-	}
+	worldIn := makeMatrix(p.ImageHeight, p.ImageWidth)
 	// get image byte by byte and store in: worldIn
 	for row := 0; row < p.ImageHeight; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
 			worldIn[row][col] = <-c.ioInput
+			if worldIn[row][col] != 0 {
+				c.events <- CellFlipped{0, util.Cell{col, row}}
+			}
 		}
 	}
 
-	fmt.Println("turn 0 alive cell count:", calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldIn))
+	fmt.Println("loaded image w alive cell count:", calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldIn))
 
 	// calculate alive cells of worldIn and pass a flipped event for each
-	aliveCells := calcAliveCells(worldIn, p.ImageHeight, p.ImageWidth)
-	for i := range aliveCells {
-		c.events <- CellFlipped{0, aliveCells[i]}
-	}
-	fmt.Println("")
+	//aliveCells := calcAliveCells(worldIn, p.ImageHeight, p.ImageWidth)
+	//for i := range aliveCells {
+	//	c.events <- CellFlipped{0, aliveCells[i]}
+	//}
 
-	c.events <- TurnComplete{0}
+	//c.events <- TurnComplete{1}
 
+	worldOut := makeMatrix(p.ImageHeight, p.ImageWidth)
 	// worldOut = worldIn
-	worldOut := make([][]byte, p.ImageHeight)
 	for row := 0; row < p.ImageHeight; row++ {
-		worldOut[row] = make([]byte, p.ImageWidth)
 		for col := 0; col < p.ImageWidth; col++ {
 			worldOut[row][col] = worldIn[row][col]
 		}
@@ -197,6 +194,7 @@ func distributor(p Params, c distributorChannels) {
 	pause := make(chan bool, 1)
 	quit := false
 
+	//var worldOut1 [][]byte
 	// TODO: Execute all turns of the Game of Life.
 	for turn < p.Turns {
 		select {
@@ -276,12 +274,20 @@ func distributor(p Params, c distributorChannels) {
 			turn++
 
 			// check which cells have changed
-			fmt.Println("turn", turn, "alive cell count:", calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldOut))
-			fmt.Println("difference in flipped cells:", differenceInFlippedCells(p.ImageHeight, p.ImageWidth, worldIn, worldOut))
+			//fmt.Println("turn", turn, "alive cell count:", calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldOut))
+			//fmt.Println("difference in flipped cells:", differenceInFlippedCells(p.ImageHeight, p.ImageWidth, worldIn, worldOut))
 			for row := 0; row < p.ImageHeight; row++ {
 				for col := 0; col < p.ImageWidth; col++ {
-					if worldOut[row][col] != worldIn[row][col] {
-						c.events <- CellFlipped{turn, util.Cell{X: row, Y: col}}
+					if p.Threads != 1 {
+						if worldOut[row][col] != worldIn[row][col] {
+							//c.events <- CellFlipped{turn, util.Cell{X: row, Y: col}}
+						}
+					} else {
+						if worldOut[row][col] != worldIn[row][col] {
+							// NOTE: print out wO and wI elems and state when theyre changed
+							// CALCALIVECELLSCOUNT(WO) - CACC(WI) = NUM. RUN FOR LOOP NUM TIMES
+							c.events <- CellFlipped{turn, util.Cell{X: col, Y: row}}
+						}
 					}
 				}
 			}
@@ -289,7 +295,11 @@ func distributor(p Params, c distributorChannels) {
 			// worldIn = worldOut before you move onto the next iteration
 			for row := 0; row < p.ImageHeight; row++ {
 				for col := 0; col < p.ImageWidth; col++ {
-					worldIn[row][col] = worldOut[row][col]
+					if p.Threads != 1 {
+						worldIn[row][col] = worldOut[row][col]
+					} else {
+						worldIn[row][col] = worldOut[row][col]
+					}
 				}
 			}
 
@@ -298,14 +308,14 @@ func distributor(p Params, c distributorChannels) {
 	}
 
 	// count final worldOut's state
-	cells := calcAliveCells(worldOut, p.ImageHeight, p.ImageWidth)
+	cells := calcAliveCells(worldIn, p.ImageHeight, p.ImageWidth)
 
 	// save to output file
 	c.ioCommand <- ioOutput
 	c.ioFilename <- name + "x" + strconv.Itoa(p.Turns)
 	for row := 0; row < p.ImageHeight; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
-			c.ioOutput <- worldOut[row][col]
+			c.ioOutput <- worldIn[row][col]
 		}
 	}
 
