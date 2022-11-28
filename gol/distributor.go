@@ -240,7 +240,7 @@ func distributor(p Params, c distributorChannels) {
 
 				// small height = height / threads
 				// big height = small height + 1
-				// do one of them height%threads times, n the other the rest of the time
+				// do one of them height%threads times, & the other the rest of the time
 
 				for i := 0; i < p.Threads; i++ {
 					endY := (i + 1) * workerHeight
