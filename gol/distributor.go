@@ -243,7 +243,7 @@ func distributor(p Params, c distributorChannels) {
 			if p.Threads == 1 {
 				worldOut = updateBoard(0, p.ImageHeight, 0, turn, worldIn, p, c.events)
 			} else {
-				workerHeight := p.ImageHeight / p.Threads
+				//workerHeight := p.ImageHeight / p.Threads
 				out := make([]chan [][]uint8, p.Threads)
 
 				for i := range out {
@@ -253,15 +253,28 @@ func distributor(p Params, c distributorChannels) {
 				// small height = height / threads
 				// big height = small height + 1
 				// do one of them height%threads times, n the other the rest of the time
-
-				for i := 0; i < p.Threads; i++ {
-					endY := (i + 1) * workerHeight
-					if i == p.Threads-1 {
-						endY = p.ImageHeight
-					}
-					go worker(i*workerHeight, endY, i, turn, worldIn, out[i], p, c.events)
-					//fmt.Println("worker heights", endY - (i * workerHeight))
+				SmallHeight := p.ImageHeight / p.Threads
+				BigHeight := SmallHeight + 1
+				counter := 0
+				for i := 0; i < p.ImageHeight%p.Threads; i++ {
+					go worker(i*BigHeight, (i+1)*BigHeight, i, turn, worldIn, out[i], p, c.events)
+					counter++
 				}
+				start := (counter + 1) * BigHeight
+				end := start + SmallHeight
+				for j := p.ImageHeight % p.Threads; j < p.Threads; j++ {
+					go worker(start, end, j, turn, worldIn, out[j], p, c.events)
+					start = start + SmallHeight
+					end = end + SmallHeight
+				}
+				//for i := 0; i < p.Threads; i++ {
+				//	endY := (i + 1) * workerHeight
+				//	if i == p.Threads-1 {
+				//		endY = p.ImageHeight
+				//	}
+				//	go worker(i*workerHeight, endY, i, turn, worldIn, out[i], p, c.events)
+				//	//fmt.Println("worker heights", endY - (i * workerHeight))
+				//}
 
 				worldOut = makeMatrix(0, 0)
 
