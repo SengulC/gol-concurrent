@@ -257,12 +257,14 @@ func distributor(p Params, c distributorChannels) {
 				BigHeight := SmallHeight + 1
 				counter := 0
 				for i := 0; i < p.ImageHeight%p.Threads; i++ {
+					fmt.Println(i*BigHeight, (i+1)*BigHeight)
 					go worker(i*BigHeight, (i+1)*BigHeight, i, turn, worldIn, out[i], p, c.events)
 					counter++
 				}
-				start := (counter + 1) * BigHeight
+				start := (counter) * BigHeight
 				end := start + SmallHeight
 				for j := p.ImageHeight % p.Threads; j < p.Threads; j++ {
+					fmt.Println(start, end)
 					go worker(start, end, j, turn, worldIn, out[j], p, c.events)
 					start = start + SmallHeight
 					end = end + SmallHeight
