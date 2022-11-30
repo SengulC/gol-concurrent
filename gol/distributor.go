@@ -92,7 +92,7 @@ func updateBoard(startY, endY, currentThread, currentTurn int, worldIn [][]byte,
 			element := worldIn[row][col]
 			counter := 0
 
-			// iterate through all neighbors of given element
+			// iterate through all the neighbors of the given element
 			for dy := -1; dy <= 1; dy++ {
 				for dx := -1; dx <= 1; dx++ {
 					nRow := (row + dx + p.ImageHeight) % p.ImageHeight
