@@ -18,7 +18,7 @@ type distributorChannels struct {
 }
 
 func saveWorldAsImage(c distributorChannels, name string, height, width, turns int, world [][]uint8) {
-	fmt.Println("Saving")
+	fmt.Println("Saving...")
 	c.ioCommand <- ioOutput
 	c.ioFilename <- name + "x" + strconv.Itoa(turns)
 	for row := 0; row < height; row++ {
@@ -29,7 +29,7 @@ func saveWorldAsImage(c distributorChannels, name string, height, width, turns i
 }
 
 func quitExecution(c distributorChannels, turns int) {
-	fmt.Println("Quitting")
+	fmt.Println("Quitting...")
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
 	c.events <- StateChange{turns, Quitting}
