@@ -36,6 +36,7 @@ func quitExecution(c distributorChannels, turns int) {
 	close(c.events)
 }
 
+// makeMatrix allocates memory for a matrix
 func makeMatrix(height, width int) [][]uint8 {
 	matrix := make([][]uint8, height)
 	for i := range matrix {
@@ -69,13 +70,29 @@ func calcAliveCells(world [][]byte, height, width int) []util.Cell {
 	return cells
 }
 
-func worker(startY, endY, currentThread, currentTurn int, worldIn [][]byte, out chan<- [][]uint8, p Params, events chan<- Event) {
-	boardSeg := updateBoard(startY, endY, currentThread, currentTurn, worldIn, p, events)
+// pauseLoop infinite loop waiting on another 'p' key press
+func pauseLoop(pause chan bool, c distributorChannels, name string, height, width, turns int, world [][]byte) {
+	for {
+		k := <-c.keyPresses
+		if k == 'p' {
+			pause <- true
+			break
+		} else if k == 's' {
+			saveWorldAsImage(c, name, height, width, turns, world)
+		} else if k == 'q' {
+			quitExecution(c, turns)
+			break
+		}
+	}
+}
+
+func worker(startY, endY int, worldIn [][]byte, out chan<- [][]uint8, p Params) {
+	boardSeg := updateBoard(startY, endY, worldIn, p)
 	out <- boardSeg
 }
 
 // UpdateBoard updates and returns a single iteration of GOL
-func updateBoard(startY, endY, currentThread, currentTurn int, worldIn [][]byte, p Params, events chan<- Event) [][]byte {
+func updateBoard(startY, endY int, worldIn [][]byte, p Params) [][]byte {
 	segHeight := endY - startY
 
 	// initialise worldOut with dead cells
@@ -92,7 +109,7 @@ func updateBoard(startY, endY, currentThread, currentTurn int, worldIn [][]byte,
 			element := worldIn[row][col]
 			counter := 0
 
-			// iterate through all the neighbors of the given element
+			// iterate through all neighbors of given element
 			for dy := -1; dy <= 1; dy++ {
 				for dx := -1; dx <= 1; dx++ {
 					nRow := (row + dx + p.ImageHeight) % p.ImageHeight
@@ -131,17 +148,6 @@ func updateBoard(startY, endY, currentThread, currentTurn int, worldIn [][]byte,
 		}
 	}
 	return worldOut
-}
-
-// pauseLoop infinite loop waiting on another 'p' key press
-func pauseLoop(kP <-chan rune, pause chan bool) {
-	for {
-		k := <-kP
-		if k == 'p' {
-			pause <- true
-			break
-		}
-	}
 }
 
 // distributor divides the work between workers and interacts with other goroutines.
@@ -187,7 +193,7 @@ func distributor(p Params, c distributorChannels) {
 			switch key {
 			case 'p':
 				fmt.Println("Paused. Current turn:", turn)
-				go pauseLoop(c.keyPresses, pause)
+				go pauseLoop(pause, c, name, p.ImageHeight, p.ImageWidth, turn, worldOut)
 				c.events <- StateChange{turn, Paused}
 				_ = <-pause
 				c.events <- StateChange{turn, Executing}
@@ -204,7 +210,7 @@ func distributor(p Params, c distributorChannels) {
 				break
 			}
 			if p.Threads == 1 {
-				worldOut = updateBoard(0, p.ImageHeight, 0, turn, worldIn, p, c.events)
+				worldOut = updateBoard(0, p.ImageHeight, worldIn, p)
 			} else {
 				out := make([]chan [][]uint8, p.Threads)
 
@@ -217,7 +223,7 @@ func distributor(p Params, c distributorChannels) {
 				counter := 0
 
 				for i := 0; i < p.ImageHeight%p.Threads; i++ {
-					go worker(i*BigHeight, (i+1)*BigHeight, i, turn, worldIn, out[i], p, c.events)
+					go worker(i*BigHeight, (i+1)*BigHeight, worldIn, out[i], p)
 					counter++
 				}
 
@@ -225,7 +231,7 @@ func distributor(p Params, c distributorChannels) {
 				end := start + SmallHeight
 
 				for j := p.ImageHeight % p.Threads; j < p.Threads; j++ {
-					go worker(start, end, j, turn, worldIn, out[j], p, c.events)
+					go worker(start, end, worldIn, out[j], p)
 					start = start + SmallHeight
 					end = end + SmallHeight
 				}
