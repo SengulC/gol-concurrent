@@ -17,24 +17,31 @@ type distributorChannels struct {
 	keyPresses <-chan rune
 }
 
+func saveWorldAsImage(c distributorChannels, name string, height, width, turns int, world [][]uint8) {
+	fmt.Println("Saving")
+	c.ioCommand <- ioOutput
+	c.ioFilename <- name + "x" + strconv.Itoa(turns)
+	for row := 0; row < height; row++ {
+		for col := 0; col < width; col++ {
+			c.ioOutput <- world[row][col]
+		}
+	}
+}
+
+func quitExecution(c distributorChannels, turns int) {
+	fmt.Println("Quitting")
+	c.ioCommand <- ioCheckIdle
+	<-c.ioIdle
+	c.events <- StateChange{turns, Quitting}
+	close(c.events)
+}
+
 func makeMatrix(height, width int) [][]uint8 {
 	matrix := make([][]uint8, height)
 	for i := range matrix {
 		matrix[i] = make([]uint8, width)
 	}
 	return matrix
-}
-
-func differenceInFlippedCells(height, width int, worldIn, worldOut [][]byte) int {
-	count := 0
-	for row := 0; row < height; row++ {
-		for col := 0; col < width; col++ {
-			if worldOut[row][col] != worldIn[row][col] {
-				count++
-			}
-		}
-	}
-	return count
 }
 
 func calcAliveCellCount(height, width int, world [][]byte) int {
@@ -70,24 +77,14 @@ func worker(startY, endY, currentThread, currentTurn int, worldIn [][]byte, out 
 // UpdateBoard updates and returns a single iteration of GOL
 func updateBoard(startY, endY, currentThread, currentTurn int, worldIn [][]byte, p Params, events chan<- Event) [][]byte {
 	segHeight := endY - startY
-	//if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
-	//	segHeight++
-	//}
 
-	// worldOut = 0
-	worldOut := make([][]byte, segHeight)
+	// initialise worldOut with dead cells
+	worldOut := makeMatrix(segHeight, p.ImageWidth)
 	for row := 0; row < segHeight; row++ {
-		worldOut[row] = make([]byte, p.ImageWidth)
 		for col := 0; col < p.ImageWidth; col++ {
 			worldOut[row][col] = 0
 		}
 	}
-
-	//endY2 := endY
-	//// if it's the LAST thread, and number of threads is ODD, but it is NOT thread 0
-	//if currentThread+1 == p.Threads && p.Threads%2 != 0 && currentThread != 0 {
-	//	endY2 = endY + 1
-	//}
 
 	for row := startY; row < endY; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
@@ -98,7 +95,6 @@ func updateBoard(startY, endY, currentThread, currentTurn int, worldIn [][]byte,
 			// iterate through all neighbors of given element
 			for dy := -1; dy <= 1; dy++ {
 				for dx := -1; dx <= 1; dx++ {
-					// creates 3x3 matrix w element as centerpiece, but centerpiece is included as well ofc.
 					nRow := (row + dx + p.ImageHeight) % p.ImageHeight
 					nCol := (col + dy + p.ImageWidth) % p.ImageWidth
 					// increment counter if given neighbor is alive
@@ -108,30 +104,26 @@ func updateBoard(startY, endY, currentThread, currentTurn int, worldIn [][]byte,
 				}
 			}
 
-			// if element is alive exclude it from the 3x3 matrix counter
+			// if element is alive exclude it from the counter
 			if element == 255 {
 				counter--
 			}
 
 			superRow := row - startY
 
-			// if element dead
+			// if element is dead
 			if element == 0 {
 				if counter == 3 {
 					worldOut[superRow][col] = 255
-					// CHANGE COL ROW ORDER
-					//events <- CellFlipped{currentTurn, util.Cell{X: superRow, Y: col}}
 				} else {
 					worldOut[superRow][col] = 0
 				}
 			} else {
-				// if element alive
+				// if element is alive
 				if counter < 2 {
 					worldOut[superRow][col] = 0
-					//events <- CellFlipped{currentTurn, util.Cell{X: superRow, Y: col}}
 				} else if counter > 3 {
 					worldOut[superRow][col] = 0
-					//events <- CellFlipped{currentTurn, util.Cell{X: superRow, Y: col}}
 				} else {
 					worldOut[superRow][col] = 255
 				}
@@ -141,6 +133,7 @@ func updateBoard(startY, endY, currentThread, currentTurn int, worldIn [][]byte,
 	return worldOut
 }
 
+// pauseLoop infinite loop waiting on another 'p' key press
 func pauseLoop(kP <-chan rune, pause chan bool) {
 	for {
 		k := <-kP
@@ -153,7 +146,7 @@ func pauseLoop(kP <-chan rune, pause chan bool) {
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
-	// TODO: Create a 2D slice to store the world.
+	// 	INPUT operations
 	name := strconv.Itoa(p.ImageWidth) + "x" + strconv.Itoa(p.ImageHeight)
 	c.ioCommand <- ioInput
 	c.ioFilename <- name
@@ -164,23 +157,13 @@ func distributor(p Params, c distributorChannels) {
 		for col := 0; col < p.ImageWidth; col++ {
 			worldIn[row][col] = <-c.ioInput
 			if worldIn[row][col] != 0 {
-				c.events <- CellFlipped{0, util.Cell{col, row}}
+				c.events <- CellFlipped{Cell: util.Cell{X: col, Y: row}}
 			}
 		}
 	}
 
-	fmt.Println("loaded image w alive cell count:", calcAliveCellCount(p.ImageHeight, p.ImageWidth, worldIn))
-
-	// calculate alive cells of worldIn and pass a flipped event for each
-	//aliveCells := calcAliveCells(worldIn, p.ImageHeight, p.ImageWidth)
-	//for i := range aliveCells {
-	//	c.events <- CellFlipped{0, aliveCells[i]}
-	//}
-
-	//c.events <- TurnComplete{1}
-
+	// initialise worldOut as worldIn for turn 0
 	worldOut := makeMatrix(p.ImageHeight, p.ImageWidth)
-	// worldOut = worldIn
 	for row := 0; row < p.ImageHeight; row++ {
 		for col := 0; col < p.ImageWidth; col++ {
 			worldOut[row][col] = worldIn[row][col]
@@ -188,13 +171,11 @@ func distributor(p Params, c distributorChannels) {
 	}
 
 	timeOver := time.NewTicker(2 * time.Second)
-
-	turn := 0
-	var key rune
 	pause := make(chan bool, 1)
 	quit := false
+	var key rune
+	turn := 0
 
-	//var worldOut1 [][]byte
 	// TODO: Execute all turns of the Game of Life.
 	for turn < p.Turns {
 		select {
@@ -205,36 +186,18 @@ func distributor(p Params, c distributorChannels) {
 		case key = <-c.keyPresses:
 			switch key {
 			case 'p':
-				//pause
 				fmt.Println("Paused. Current turn:", turn)
 				go pauseLoop(c.keyPresses, pause)
+				c.events <- StateChange{turn, Paused}
 				_ = <-pause
+				c.events <- StateChange{turn, Executing}
 				fmt.Println("Continuing.")
 			case 's':
-				//save
-				fmt.Println("Saving")
-				c.ioCommand <- ioOutput
-				c.ioFilename <- name + "x" + strconv.Itoa(p.Turns)
-				for row := 0; row < p.ImageHeight; row++ {
-					for col := 0; col < p.ImageWidth; col++ {
-						c.ioOutput <- worldOut[row][col]
-					}
-				}
+				saveWorldAsImage(c, name, p.ImageHeight, p.ImageWidth, p.Turns, worldOut)
 			case 'q':
-				//quit
 				quit = true
-				fmt.Println("Quitting")
-				c.ioCommand <- ioOutput
-				c.ioFilename <- name + "x" + strconv.Itoa(p.Turns)
-				for row := 0; row < p.ImageHeight; row++ {
-					for col := 0; col < p.ImageWidth; col++ {
-						c.ioOutput <- worldOut[row][col]
-					}
-				}
-				c.ioCommand <- ioCheckIdle
-				<-c.ioIdle
-				c.events <- StateChange{turn, Quitting}
-				close(c.events)
+				saveWorldAsImage(c, name, p.ImageHeight, p.ImageWidth, p.Turns, worldOut)
+				quitExecution(c, turn)
 			}
 		default:
 			if quit {
@@ -243,40 +206,29 @@ func distributor(p Params, c distributorChannels) {
 			if p.Threads == 1 {
 				worldOut = updateBoard(0, p.ImageHeight, 0, turn, worldIn, p, c.events)
 			} else {
-				//workerHeight := p.ImageHeight / p.Threads
 				out := make([]chan [][]uint8, p.Threads)
 
 				for i := range out {
 					out[i] = make(chan [][]uint8)
 				}
 
-				// small height = height / threads
-				// big height = small height + 1
-				// do one of them height%threads times, n the other the rest of the time
 				SmallHeight := p.ImageHeight / p.Threads
 				BigHeight := SmallHeight + 1
 				counter := 0
+
 				for i := 0; i < p.ImageHeight%p.Threads; i++ {
-					fmt.Println(i*BigHeight, (i+1)*BigHeight)
 					go worker(i*BigHeight, (i+1)*BigHeight, i, turn, worldIn, out[i], p, c.events)
 					counter++
 				}
+
 				start := (counter) * BigHeight
 				end := start + SmallHeight
+
 				for j := p.ImageHeight % p.Threads; j < p.Threads; j++ {
-					fmt.Println(start, end)
 					go worker(start, end, j, turn, worldIn, out[j], p, c.events)
 					start = start + SmallHeight
 					end = end + SmallHeight
 				}
-				//for i := 0; i < p.Threads; i++ {
-				//	endY := (i + 1) * workerHeight
-				//	if i == p.Threads-1 {
-				//		endY = p.ImageHeight
-				//	}
-				//	go worker(i*workerHeight, endY, i, turn, worldIn, out[i], p, c.events)
-				//	//fmt.Println("worker heights", endY - (i * workerHeight))
-				//}
 
 				worldOut = makeMatrix(0, 0)
 
@@ -288,7 +240,7 @@ func distributor(p Params, c distributorChannels) {
 
 			turn++
 
-			// check which cells have changed
+			// check which cells have changed, and send CellFlipped event
 			for row := 0; row < p.ImageHeight; row++ {
 				for col := 0; col < p.ImageWidth; col++ {
 					if worldOut[row][col] != worldIn[row][col] {
@@ -311,25 +263,11 @@ func distributor(p Params, c distributorChannels) {
 	// count final worldOut's state
 	cells := calcAliveCells(worldIn, p.ImageHeight, p.ImageWidth)
 
-	// save to output file
-	c.ioCommand <- ioOutput
-	c.ioFilename <- name + "x" + strconv.Itoa(p.Turns)
-	for row := 0; row < p.ImageHeight; row++ {
-		for col := 0; col < p.ImageWidth; col++ {
-			c.ioOutput <- worldIn[row][col]
-		}
-	}
+	// OUTPUT operations
+	saveWorldAsImage(c, name, p.ImageHeight, p.ImageWidth, turn, worldIn)
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
-	// pass it down events channel (list of alive cells)
 	c.events <- FinalTurnComplete{p.Turns, cells}
 
-	// Make sure that the Io has finished any output before exiting.
-	c.ioCommand <- ioCheckIdle
-	<-c.ioIdle
-
-	c.events <- StateChange{turn, Quitting}
-
-	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
-	close(c.events)
+	quitExecution(c, turn)
 }
