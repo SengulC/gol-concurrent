@@ -1,6 +1,6 @@
-# CSA Coursework: Game of Life
+# CSA Coursework: Game of Life, concurrent version
 
-This is the Computer Systems A summative coursework as completed by Sengul Cagdal and Rahat Mittal. 
+This is the Computer Systems A summative coursework's concurrent version as completed by Sengul Cagdal and Rahat Mittal. 
 
 The full description of the coursework, task by task, can be found in the _distributed_ repository. 
 
